@@ -1,12 +1,6 @@
 #pragma once
 #include <neweng/main.h>
 
-typedef struct {
-    f64 // Why not?
-    r, g, b, a;
-} NE_Color;
-
-
 typedef enum {
     NE_KEY_keyNULL = 0,
     NE_KEY_escape = '\033',
@@ -154,6 +148,8 @@ bool NScreen_IsKeyReleased(NE_Key key);
 
 bool NScreen_GetDepthTest();
 void NScreen_SetDepthTest(bool test);
+
+void NScreen_RenderModel(NE_Model model, NE_TransformW transform);
 
 void *NScreen_GetSystemHandler();
 

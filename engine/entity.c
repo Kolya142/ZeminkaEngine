@@ -37,7 +37,7 @@ NEnt_ent NEnt_add(NEnt_intf intf) {
 }
 
 void NEnt_update(void) {
-    bool isFixed = ((s32)(deltaTime*10.)) % 3 == 0;
+    bool isFixed = ((s32)(NE_deltaTime*10.)) % 3 == 0;
     for (size_t i = 0; i < ent_count; ++i) {
         if (ent_arr[i].is_freeless) {
             ent_arr[i].intf.onmsg(ent_arr[i].data, i, -1, NENT_MSG_UPDATE, NULL);

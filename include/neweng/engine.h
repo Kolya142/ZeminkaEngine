@@ -5,5 +5,3 @@
 
 #include <neweng/screen.h> // NScreen_*
 #include <neweng/entity.h> // NEnt_*
-
-extern double deltaTime;

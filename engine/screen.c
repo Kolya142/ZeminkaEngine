@@ -166,6 +166,20 @@ void NScreen_SetDepthTest(bool test) {
     glDepthFunc(test ? GL_LESS : GL_ALWAYS);
 }
 
+void NScreen_RenderModel(NE_Model model, NE_TransformW transform) {
+    for (size_t i = 0; i < model.face_count; ++i) {
+        NE_Face face = model.faces[i];
+        NScreen_DrawTriangle_Ex(
+            NE_TransformW_Apply(transform, model.verteces[face.a]),
+            NE_TransformW_Apply(transform, model.verteces[face.b]),
+            NE_TransformW_Apply(transform, model.verteces[face.c]),
+            model.colors[face.a],
+            model.colors[face.b],
+            model.colors[face.c]
+            );
+    }
+}
+
 void *NScreen_GetSystemHandler() {
     return rwin;
 }

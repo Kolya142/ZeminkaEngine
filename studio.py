@@ -17,7 +17,7 @@ from typing import List, Optional, Dict
 # --- КОНФИГУРАЦИЯ ---
 class Config:
     APP_NAME = "NewEngine Studio"
-    VERSION = "0.7.1" 
+    VERSION = "0.7.2" 
     THEME = "Dark"
     ACCENT_COLOR = "blue"
     
@@ -37,7 +37,7 @@ class Config:
     URL_STUDIO_RAW = "https://raw.githubusercontent.com/crimbrodev/newengineSTUDIO/main/studio.py"
     URL_ENGINE_ZIP = "https://github.com/Kolya142/newengine/archive/refs/heads/main.zip"
 
-# --- ЛОГИКА КОНВЕРТАЦИИ АССЕТОВ ---
+# --- ЛОГИКА КОНВЕРТАЦИИ ---
 class AssetConverter:
     @staticmethod
     def convert_obj_to_h(obj_path: Path) -> str:
@@ -64,113 +64,34 @@ class AssetConverter:
             return content
         except Exception as e: return f"ERROR: {str(e)}"
 
-# --- ДИАГНОСТИКА СИСТЕМЫ ---
+# --- ДИАГНОСТИКА ---
 class SystemHealth:
     @staticmethod
     def check_gcc() -> tuple[bool, str]:
         try:
             res = subprocess.run([Config.COMPILER, "--version"], capture_output=True, text=True)
             return (True, res.stdout.split('\n')[0]) if res.returncode == 0 else (False, "GCC Error")
-        except FileNotFoundError: return False, "GCC не найден в PATH."
-
+        except FileNotFoundError: return False, "GCC не найден."
     @staticmethod
     def check_folders() -> List[tuple[str, bool]]:
-        return [("engine/", Config.ENGINE_DIR.exists()), ("game/", Config.GAME_DIR.exists()), 
-                ("include/", Config.INCLUDE_DIR.exists()), ("bin/", Config.BIN_DIR.exists())]
+        return [("engine/", Config.ENGINE_DIR.exists()), ("game/", Config.GAME_DIR.exists()), ("include/", Config.INCLUDE_DIR.exists())]
 
-# --- УПРАВЛЕНИЕ ШАБЛОНАМИ ---
+# --- ШАБЛОНЫ ---
 class TemplateManager:
     TEMPLATES = {
-        "Minimal": {
-            "code": """#include <neweng/engine.h>
-int main() {
-    NScreen_init(1280, 720, 90., "New Project");
-    while (NScreen_IsNtClosed()) {
-        NScreen_BeginFrame();
-        NScreen_DrawTriangle((NE_Vec3){0,1,2}, (NE_Vec3){-1,-1,2}, (NE_Vec3){1,-1,2}, NE_GREEN);
-        NScreen_EndFrame();
-    }
-    return 0;
-}"""
-        }
+        "Minimal": {"code": "#include <neweng/engine.h>\n\nint main() {\n    NScreen_init(1280, 720, 90., \"New Project\");\n    while (NScreen_IsNtClosed()) {\n        NScreen_BeginFrame();\n        NScreen_DrawTriangle((NE_Vec3){0,1,2}, (NE_Vec3){-1,-1,2}, (NE_Vec3){1,-1,2}, NE_GREEN);\n        NScreen_EndFrame();\n    }\n    return 0;\n}"}
     }
     @staticmethod
-    def apply_template(name: str):
-        if name in TemplateManager.TEMPLATES:
-            Config.GAME_DIR.mkdir(exist_ok=True)
-            main_file = Config.GAME_DIR / "main.c"
-            if main_file.exists(): shutil.copy(main_file, str(main_file) + ".bak")
-            main_file.write_text(TemplateManager.TEMPLATES[name]["code"], encoding="utf-8")
-            return True
-        return False
+    def apply(name: str):
+        Config.GAME_DIR.mkdir(exist_ok=True)
+        main_f = Config.GAME_DIR / "main.c"
+        if main_f.exists(): shutil.copy(main_f, str(main_f) + ".bak")
+        main_f.write_text(TemplateManager.TEMPLATES[name]["code"])
 
-# --- ЛОГИКА ОБНОВЛЕНИЯ ---
-class Updater:
-    def __init__(self, log_callback): self.log = log_callback
-    def update_studio(self):
-        self.log("Обновление студии...\n", "info")
-        try:
-            with urllib.request.urlopen(Config.URL_STUDIO_RAW) as response:
-                if response.status == 200:
-                    with open("studio.py.new", "wb") as f: f.write(response.read())
-                    os.replace("studio.py.new", "studio.py")
-                    self.log("УСПЕШНО! Перезапустите программу.\n", "success")
-        except Exception as e: self.log(f"Ошибка: {e}\n", "error")
-
-    def update_engine(self):
-        self.log("Обновление движка...\n", "info")
-        try:
-            with urllib.request.urlopen(Config.URL_ENGINE_ZIP) as response:
-                if response.status == 200:
-                    zip_data = response.read()
-                    with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
-                        root = z.namelist()[0].split('/')[0]
-                        for folder in ["engine", "include"]:
-                            prefix = f"{root}/{folder}/"
-                            for file in z.namelist():
-                                if file.startswith(prefix) and not file.endswith('/'):
-                                    rel = file[len(f"{root}/"):]
-                                    dest = Config.ROOT_DIR / rel
-                                    dest.parent.mkdir(parents=True, exist_ok=True)
-                                    with open(dest, "wb") as f: f.write(z.read(file))
-                    self.log("Движок обновлен!\n", "success")
-        except Exception as e: self.log(f"Ошибка: {e}\n", "error")
-
-# --- СЛЕЖЕНИЕ ЗА ФАЙЛАМИ (Hot Reload) ---
-class FileWatcher:
-    def __init__(self, build_callback):
-        self.build_callback = build_callback
-        self.watching = False
-        self.file_times: Dict[str, float] = {}
-
-    def start(self):
-        self.watching = True
-        self._update_times()
-        threading.Thread(target=self._watch_loop, daemon=True).start()
-
-    def _update_times(self):
-        for d in [Config.ENGINE_DIR, Config.GAME_DIR]:
-            if d.exists():
-                for f in d.rglob("*.c"): self.file_times[str(f)] = os.path.getmtime(f)
-
-    def _watch_loop(self):
-        while self.watching:
-            time.sleep(1.0)
-            changed = False
-            for d in [Config.ENGINE_DIR, Config.GAME_DIR]:
-                if d.exists():
-                    for f in d.rglob("*.c"):
-                        m = os.path.getmtime(f)
-                        if str(f) not in self.file_times or m > self.file_times[str(f)]:
-                            self.file_times[str(f)] = m
-                            changed = True
-            if changed: self.build_callback()
-
-# --- СИСТЕМА СБОРКИ (Profiles + Issues) ---
+# --- СИСТЕМА СБОРКИ ---
 class BuildSystem:
-    def __init__(self, app_instance):
-        self.app_instance = app_instance
-        self.console_log = app_instance.log_to_console
+    def __init__(self, app):
+        self.app = app
         self.game_process: Optional[subprocess.Popen] = None
         self.is_building = False
         self.err_pattern = re.compile(r"^(.*):(\d+):(\d+): (error|warning|note): (.*)$")
@@ -181,15 +102,15 @@ class BuildSystem:
 
     def _build_task(self, profile, run_after):
         self.is_building = True
-        self.app_instance.set_ui_busy(True)
-        self.app_instance.clear_console()
-        self.app_instance.clear_issues()
+        self.app.set_ui_busy(True)
+        self.app.clear_console()
+        self.app.clear_issues()
         
         if run_after and self.game_process and self.game_process.poll() is None:
             try: self.game_process.terminate(); self.game_process.wait(timeout=1)
             except: pass
 
-        self.console_log(f"--- СБОРКА [{profile.upper()}] ---\n", "info")
+        self.app.log_to_console(f"--- СБОРКА [{profile.upper()}] ---\n", "info")
         Config.BIN_DIR.mkdir(exist_ok=True); Config.OBJ_DIR.mkdir(exist_ok=True)
         
         sources = []
@@ -197,155 +118,196 @@ class BuildSystem:
             if d.exists(): sources.extend(list(d.rglob("*.c")))
 
         object_files, has_error = [], False
-        profile_flags = ["-g", "-O0"] if profile == "Debug" else ["-O3", "-s"]
-        common_flags = [f"-I{Config.INCLUDE_DIR}", f"-I{Config.ASSETS_DIR}", "-Wall"] + profile_flags
+        p_flags = ["-g", "-O0"] if profile == "Debug" else ["-O3", "-s"]
+        common = [f"-I{Config.INCLUDE_DIR}", f"-I{Config.ASSETS_DIR}", "-Wall"] + p_flags
 
-        for src_path in sources:
-            rel = src_path.relative_to(Config.ROOT_DIR)
+        for src in sources:
+            rel = src.relative_to(Config.ROOT_DIR)
             obj = Config.OBJ_DIR / str(rel).replace(os.sep, "_").replace(".c", ".o")
             object_files.append(str(obj))
-            if obj.exists() and os.path.getmtime(obj) > os.path.getmtime(src_path): continue 
+            if obj.exists() and os.path.getmtime(obj) > os.path.getmtime(src): continue 
+            
+            cmd = [Config.COMPILER, "-c", str(src), "-o", str(obj)] + common
+            if "engine" in src.parts and src.name == "main.c": cmd.append("-Dmain=__engine_dummy_main")
 
-            cmd = [Config.COMPILER, "-c", str(src_path), "-o", str(obj)] + common_flags
-            if "engine" in src_path.parts and src_path.name == "main.c": cmd.append("-Dmain=__engine_dummy_main")
-
-            self.console_log(f"Compiling: {rel}\n", "dim")
+            self.app.log_to_console(f"Компиляция: {rel}\n", "dim")
             proc = subprocess.run(cmd, capture_output=True, text=True, cwd=Config.ROOT_DIR)
-            if proc.stderr: self._parse_gcc_output(proc.stderr)
+            if proc.stderr: self._parse(proc.stderr)
             if proc.returncode != 0: has_error = True; break
 
         if not has_error:
-            self.console_log("Линковка...\n", "info")
+            self.app.log_to_console("Линковка...\n", "info")
             out = Config.BIN_DIR / Config.OUTPUT_NAME
-            link_flags = ["-lopengl32", "-lglu32", "-lgdi32", "-lwinmm"] if platform.system() == "Windows" else ["-lGL", "-lGLU", "-lm", "-lX11", "-lXrandr"]
-            if profile == "Release" and platform.system() == "Windows": link_flags.append("-mwindows")
+            l_flags = ["-lopengl32", "-lglu32", "-lgdi32", "-lwinmm"] if platform.system() == "Windows" else ["-lGL", "-lGLU", "-lm", "-lX11", "-lXrandr"]
+            if profile == "Release" and platform.system() == "Windows": l_flags.append("-mwindows")
             
-            l_cmd = [Config.COMPILER] + object_files + ["-o", str(out)] + common_flags + link_flags
+            l_cmd = [Config.COMPILER] + object_files + ["-o", str(out)] + common + l_flags
             proc = subprocess.run(l_cmd, capture_output=True, text=True, cwd=Config.ROOT_DIR)
-            if proc.stderr: self._parse_gcc_output(proc.stderr)
+            if proc.stderr: self._parse(proc.stderr)
             if proc.returncode == 0:
-                self.console_log(f"УСПЕШНО!\n", "success")
+                self.app.log_to_console("УСПЕХ!\n", "success")
                 if run_after: self.run_game()
         
         self.is_building = False
-        self.app_instance.set_ui_busy(False)
+        self.app.set_ui_busy(False)
 
-    def _parse_gcc_output(self, text):
+    def _parse(self, text):
         for line in text.splitlines():
-            match = self.err_pattern.match(line)
-            if match:
-                f, l, c, s, m = match.groups()
-                self.app_instance.add_issue(f, l, s, m)
-                self.console_log(line + "\n", "error" if s == "error" else "warning")
-            else: self.console_log(line + "\n")
+            m = self.err_pattern.match(line)
+            if m:
+                f, ln, c, s, msg = m.groups()
+                self.app.add_issue(f, ln, s, msg)
+                self.app.log_to_console(line + "\n", "error" if s == "error" else "warning")
+            else: self.app.log_to_console(line + "\n")
 
     def run_game(self):
         exe = Config.BIN_DIR / Config.OUTPUT_NAME
         if not exe.exists(): return
         try: self.game_process = subprocess.Popen([str(exe)], cwd=Config.ROOT_DIR)
-        except Exception as e: self.console_log(f"Ошибка: {e}\n", "error")
+        except Exception as e: self.app.log_to_console(f"Ошибка запуска: {e}\n", "error")
+
+# --- UI КОМПОНЕНТЫ ---
+class IssuesPanel(ctk.CTkFrame):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        # Настройка стиля для Treeview (Темная тема)
+        st = ttk.Style()
+        st.theme_use("clam")
+        st.configure("Treeview", background="#1d1d1d", foreground="#ffffff", fieldbackground="#1d1d1d", borderwidth=0, font=("Segoe UI", 10))
+        st.configure("Treeview.Heading", background="#333333", foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10, "bold"))
+        st.map("Treeview", background=[('selected', '#1f538d')])
+
+        self.tree = ttk.Treeview(self, columns=("F", "L", "T", "M"), show='headings')
+        self.tree.heading("F", text="Файл"); self.tree.heading("L", text="Стр"); self.tree.heading("T", text="Тип"); self.tree.heading("M", text="Сообщение")
+        self.tree.column("F", width=120); self.tree.column("L", width=40); self.tree.column("T", width=70); self.tree.column("M", width=400)
+        
+        sb = ctk.CTkScrollbar(self, orientation="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+    def add(self, f, l, s, m):
+        icon = "❌" if s == "error" else "⚠️"
+        self.tree.insert("", "end", values=(f, l, f"{icon} {s}", m))
 
 # --- ГЛАВНОЕ ОКНО ---
 class StudioApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title(f"{Config.APP_NAME} v{Config.VERSION}")
-        self.geometry("1200x850")
-        ctk.set_appearance_mode(Config.THEME)
+        self.geometry("1100x850")
+        ctk.set_appearance_mode("Dark")
         
-        self.build_system = BuildSystem(self)
-        self.file_watcher = FileWatcher(lambda: self.build_system.build(self.profile_var.get(), True))
-        self.updater = Updater(self.log_to_console)
-        
+        # Системы
+        self.build_sys = BuildSystem(self)
+        self.watcher = threading.Thread(target=self._hot_reload_loop, daemon=True)
+        self.watcher_active = False
+        self.file_times = {}
+
+        # Сетка
         self.grid_columnconfigure(1, weight=1); self.grid_rowconfigure(0, weight=1)
 
-        # ЛЕВОЕ МЕНЮ
-        self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0)
-        self.sidebar.grid(row=0, column=0, sticky="nsew")
-        ctk.CTkLabel(self.sidebar, text="NEW ENGINE", font=("Arial", 22, "bold")).pack(pady=20)
+        # Боковая панель
+        self.side = ctk.CTkFrame(self, width=200, corner_radius=0)
+        self.side.grid(row=0, column=0, sticky="nsew")
+        ctk.CTkLabel(self.side, text="NEW ENGINE", font=("Arial", 20, "bold")).pack(pady=25)
         
-        ctk.CTkLabel(self.sidebar, text="Профиль сборки:", font=("Arial", 12)).pack()
-        self.profile_var = ctk.StringVar(value="Debug")
-        ctk.CTkOptionMenu(self.sidebar, values=["Debug", "Release"], variable=self.profile_var).pack(padx=20, pady=10)
+        ctk.CTkLabel(self.side, text="Профиль сборки:", font=("Arial", 11)).pack()
+        self.prof_var = ctk.StringVar(value="Debug")
+        ctk.CTkOptionMenu(self.side, values=["Debug", "Release"], variable=self.prof_var).pack(pady=10, padx=20)
 
-        self.btn_build = ctk.CTkButton(self.sidebar, text="🔨 Build", command=lambda: self.build_system.build(self.profile_var.get(), False))
-        self.btn_build.pack(padx=20, pady=5)
-        self.btn_run = ctk.CTkButton(self.sidebar, text="▶ Run", command=self.build_system.run_game, fg_color="green")
-        self.btn_run.pack(padx=20, pady=5)
-        self.btn_br = ctk.CTkButton(self.sidebar, text="🚀 Build & Run", command=lambda: self.build_system.build(self.profile_var.get(), True))
-        self.btn_br.pack(padx=20, pady=5)
+        self.btn_build = ctk.CTkButton(self.side, text="🔨 Build", command=lambda: self.build_sys.build(self.prof_var.get(), False))
+        self.btn_build.pack(pady=5, padx=20)
+        self.btn_run = ctk.CTkButton(self.side, text="▶ Run", fg_color="#2d8a2d", command=self.build_sys.run_game)
+        self.btn_run.pack(pady=5, padx=20)
+        self.btn_br = ctk.CTkButton(self.side, text="🚀 Build & Run", command=lambda: self.build_sys.build(self.prof_var.get(), True))
+        self.btn_br.pack(pady=5, padx=20)
         
-        self.chk_autobuild = ctk.CTkSwitch(self.sidebar, text="⚡ Auto-Build", command=self.toggle_autobuild)
-        self.chk_autobuild.pack(padx=20, pady=20)
+        self.sw_auto = ctk.CTkSwitch(self.side, text="⚡ Auto-Build", command=self.toggle_watcher)
+        self.sw_auto.pack(pady=30)
 
-        # ВКЛАДКИ
-        self.tab_view = ctk.CTkTabview(self)
-        self.tab_view.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        # Вкладки
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
         
-        self.setup_logs_tab(self.tab_view.add("Логи & Ошибки"))
-        self.setup_assets_tab(self.tab_view.add("Ассеты"))
-        self.setup_system_tab(self.tab_view.add("Система"))
-        self.setup_update_tab(self.tab_view.add("Обновление"))
+        # Настройка вкладок
+        self.setup_logs(self.tabs.add("Логи & Ошибки"))
+        self.setup_assets(self.tabs.add("Ассеты"))
+        self.setup_system(self.tabs.add("Система"))
+        self.setup_update(self.tabs.add("Обновление"))
 
-    def setup_logs_tab(self, tab):
+    def setup_logs(self, tab):
         tab.grid_columnconfigure(0, weight=1); tab.grid_rowconfigure((0, 1), weight=1)
-        self.issues_tree = ttk.Treeview(tab, columns=("F", "L", "T", "M"), show='headings')
-        for c, h, w in [("F", "Файл", 150), ("L", "Стр", 50), ("T", "Тип", 80), ("M", "Сообщение", 400)]:
-            self.issues_tree.heading(c, text=h); self.issues_tree.column(c, width=w)
-        self.issues_tree.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.issues = IssuesPanel(tab); self.issues.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.console = LogPanel(tab); self.console.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-    def setup_assets_tab(self, tab):
+    def setup_assets(self, tab):
         tab.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(tab, text="OBJ to Header Converter", font=("Arial", 16, "bold")).pack(pady=10)
-        self.btn_sel_obj = ctk.CTkButton(tab, text="Выбрать .obj", command=self.select_obj)
-        self.btn_sel_obj.pack(pady=5)
+        ctk.CTkLabel(tab, text="Конвертер OBJ в Header", font=("Arial", 16, "bold")).pack(pady=20)
+        self.btn_obj = ctk.CTkButton(tab, text="Выбрать .obj", command=self._sel_obj).pack(pady=10)
         self.lbl_obj = ctk.CTkLabel(tab, text="Файл не выбран"); self.lbl_obj.pack()
-        self.btn_conv = ctk.CTkButton(tab, text="Конвертировать", command=self.convert_obj, state="disabled")
-        self.btn_conv.pack(pady=10)
-        self.asset_log = ctk.CTkTextbox(tab, height=100); self.asset_log.pack(fill="x", padx=20)
+        self.btn_conv = ctk.CTkButton(tab, text="Конвертировать", state="disabled", command=self._conv_obj)
+        self.btn_conv.pack(pady=20)
 
-    def setup_system_tab(self, tab):
+    def setup_system(self, tab):
         tab.grid_columnconfigure((0,1), weight=1)
-        f_h = ctk.CTkFrame(tab); f_h.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        ctk.CTkLabel(f_h, text="Диагностика", font=("Arial", 14, "bold")).pack(pady=5)
-        self.health_box = ctk.CTkTextbox(f_h, height=150); self.health_box.pack(padx=5, pady=5)
-        ctk.CTkButton(f_h, text="Проверить", command=self.run_diag).pack(pady=5)
-        
-        f_t = ctk.CTkFrame(tab); f_t.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        ctk.CTkLabel(f_t, text="Шаблоны", font=("Arial", 14, "bold")).pack(pady=5)
-        for n in TemplateManager.TEMPLATES:
-            ctk.CTkButton(f_t, text=f"Применить {n}", command=lambda n=n: self.apply_tmpl(n)).pack(pady=5)
+        f1 = ctk.CTkFrame(tab); f1.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        ctk.CTkLabel(f1, text="Диагностика", font=("Arial", 14, "bold")).pack(pady=10)
+        self.diag_box = ctk.CTkTextbox(f1, height=200); self.diag_box.pack(fill="x", padx=10)
+        ctk.CTkButton(f1, text="Проверить", command=self._run_diag).pack(pady=10)
 
-    def setup_update_tab(self, tab):
-        ctk.CTkButton(tab, text="Обновить Студию", command=lambda: threading.Thread(target=self.updater.update_studio, daemon=True).start()).pack(pady=10)
-        ctk.CTkButton(tab, text="Обновить Движок", command=lambda: threading.Thread(target=self.updater.update_engine, daemon=True).start(), fg_color="orange").pack(pady=10)
+        f2 = ctk.CTkFrame(tab); f2.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        ctk.CTkLabel(f2, text="Шаблоны", font=("Arial", 14, "bold")).pack(pady=10)
+        ctk.CTkButton(f2, text="Применить Minimal", command=lambda: self._apply_t("Minimal")).pack(pady=5)
 
-    # Хелперы
-    def toggle_autobuild(self):
-        if self.chk_autobuild.get(): self.file_watcher.start(); self.log_to_console("Auto-Build ON\n", "success")
-        else: self.file_watcher.watching = False
-    def select_obj(self):
-        p = ctk.filedialog.askopenfilename(filetypes=[("OBJ", "*.obj")])
-        if p: self.obj_p = Path(p); self.lbl_obj.configure(text=self.obj_p.name); self.btn_conv.configure(state="normal")
-    def convert_obj(self):
-        Config.ASSETS_DIR.mkdir(exist_ok=True)
-        code = AssetConverter.convert_obj_to_h(self.obj_p)
-        (Config.ASSETS_DIR / (self.obj_p.stem + ".h")).write_text(code)
-        self.asset_log.insert("end", f"Success: {self.obj_p.stem}.h created\n")
-    def run_diag(self):
-        self.health_box.delete("1.0", "end")
-        ok, m = SystemHealth.check_gcc(); self.health_box.insert("end", f"GCC: {'✅' if ok else '❌'} {m}\n")
-        for f, ex in SystemHealth.check_folders(): self.health_box.insert("end", f"{'✅' if ex else '❌'} {f}\n")
-    def apply_tmpl(self, n):
-        if messagebox.askyesno("?", f"Apply {n}?"): TemplateManager.apply_template(n)
-    def add_issue(self, f, l, s, m): self.after(0, lambda: self.issues_tree.insert("", "end", values=(f, l, s, m)))
-    def clear_issues(self): self.after(0, lambda: [self.issues_tree.delete(i) for i in self.issues_tree.get_children()])
-    def log_to_console(self, t, g=None): self.after(0, lambda: self.console.write(t, g))
+    def setup_update(self, tab):
+        ctk.CTkButton(tab, text="Обновить Студию", command=self._upd_st).pack(pady=10)
+        ctk.CTkButton(tab, text="Обновить Движок", fg_color="orange", command=self._upd_en).pack(pady=10)
+
+    # Вспомогательные методы
+    def log_to_console(self, t, tag=None): self.after(0, lambda: self.console.write(t, tag))
     def clear_console(self): self.after(0, lambda: self.console.clear())
+    def add_issue(self, f, l, s, m): self.after(0, lambda: self.issues.add(f, l, s, m))
+    def clear_issues(self): self.after(0, lambda: [self.issues.tree.delete(i) for i in self.issues.tree.get_children()])
+    
     def set_ui_busy(self, b):
         s = "disabled" if b else "normal"
         self.btn_build.configure(state=s); self.btn_run.configure(state=s); self.btn_br.configure(state=s)
+
+    def toggle_watcher(self):
+        self.watcher_active = self.sw_auto.get()
+        if self.watcher_active and not self.watcher.is_alive(): self.watcher.start()
+
+    def _hot_reload_loop(self):
+        while True:
+            if self.watcher_active:
+                changed = False
+                for d in [Config.ENGINE_DIR, Config.GAME_DIR]:
+                    if d.exists():
+                        for f in d.rglob("*.c"):
+                            m = os.path.getmtime(f)
+                            if str(f) not in self.file_times or m > self.file_times[str(f)]:
+                                self.file_times[str(f)] = m; changed = True
+                if changed: self.after(0, lambda: self.build_sys.build(self.prof_var.get(), True))
+            time.sleep(1)
+
+    def _sel_obj(self):
+        p = ctk.filedialog.askopenfilename(filetypes=[("OBJ", "*.obj")])
+        if p: self.obj_p = Path(p); self.lbl_obj.configure(text=self.obj_p.name); self.btn_conv.configure(state="normal")
+    def _conv_obj(self):
+        Config.ASSETS_DIR.mkdir(exist_ok=True)
+        res = AssetConverter.convert_obj_to_h(self.obj_p)
+        (Config.ASSETS_DIR / (self.obj_p.stem + ".h")).write_text(res)
+        messagebox.showinfo("OK", "Ассет создан!")
+    def _run_diag(self):
+        self.diag_box.delete("1.0", "end")
+        ok, m = SystemHealth.check_gcc(); self.diag_box.insert("end", f"GCC: {'✅' if ok else '❌'} {m}\n")
+        for f, ex in SystemHealth.check_folders(): self.diag_box.insert("end", f"{'✅' if ex else '❌'} {f}\n")
+    def _apply_t(self, n):
+        if messagebox.askyesno("?", f"Применить {n}?"): TemplateManager.apply(n)
+    def _upd_st(self): threading.Thread(target=lambda: Updater(self.log_to_console).update_studio(), daemon=True).start()
+    def _upd_en(self): threading.Thread(target=lambda: Updater(self.log_to_console).update_engine(), daemon=True).start()
 
 class LogPanel(ctk.CTkTextbox):
     def __init__(self, master, **kwargs):

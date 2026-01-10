@@ -167,3 +167,16 @@ void *ZEScreen_GetSystemHandler();
 #define ZEWHITE ((ZEColor){1.,1.,1.,1.})
 #define ZEGRAY ((ZEColor){.5,.5,.5,1.})
 #define ZEORANGE ((ZEColor){1.,.5,0,1.})
+
+// Small hack for the MSVC compiler.
+#define ZERED_ {1.,0,0,1.}
+#define ZEMAGENTA_ {1.,0,1.,1.}
+#define ZEMYCOLOR_ {.894,.878,0,1.}
+#define ZEGREEN_ {0,1.,0,1.}
+#define ZECYAN_ {0,1.,1.,1.}
+#define ZEBLUE_ {0,0,1.,1.}
+#define ZEBLACK_ {0,0,0,1.}
+#define ZEWHITE_ {1.,1.,1.,1.}
+#define ZEGRAY_ {.5,.5,.5,1.}
+#define ZEORANGE_ {1.,.5,0,1.}
+ 

@@ -115,19 +115,22 @@ void ZEScreen_BeginFrame(f64 *omx, f64 *omy) {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    i32 mx_ = 0, my_ = 0;
-    RGFW_window_getMouse(rwin, &mx_, &my_);
-    {
-        f32 mx = mx_;
-        f32 my = my_;
-        mx -= rwidth*.5;
-        my -= rheight*.5;
-        mx /= rwidth*.5;
-        my /= rheight*.5;
-        if (omx) *omx = mx;
-        if (omy) *omy = my;
-        RGFW_window_moveMouse(rwin, rwin->x+rwidth*.5, rwin->y+rheight*.5);
-    }
+    // It doesn't work on MS Windows.
+    if (omx) *omx = 0;
+    if (omy) *omy = 0;
+    // i32 mx_ = 0, my_ = 0;
+    // RGFW_window_getMouse(rwin, &mx_, &my_);
+    // {
+    //     f32 mx = mx_;
+    //     f32 my = my_;
+    //     mx -= rwidth*.5;
+    //     my -= rheight*.5;
+    //     mx /= rwidth*.5;
+    //     my /= rheight*.5;
+    //     if (omx) *omx = mx;
+    //     if (omy) *omy = my;
+    //     RGFW_window_moveMouse(rwin, rwin->x+rwidth*.5, rwin->y+rheight*.5);
+    // }
 }
 
 void ZEScreen_TranslateCamera(ZEVec3 origin) {

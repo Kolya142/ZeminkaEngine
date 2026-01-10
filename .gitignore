@@ -1,1 +1,6 @@
 game.elf
+game.exe
+
+# MS Windows stuff
+obj/
+bin/

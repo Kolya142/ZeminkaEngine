@@ -103,14 +103,14 @@ static const ZEVertex player_model_v[] = {
 };
 
 static const ZEColor player_model_c[] = {
-    ZERED,
-    ZEMAGENTA,
-    ZEGREEN,
-    ZECYAN,
-    ZEBLUE,
-    ZEBLACK,
-    ZEWHITE,
-    ZEORANGE,
+    ZERED_,
+    ZEMAGENTA_,
+    ZEGREEN_,
+    ZECYAN_,
+    ZEBLUE_,
+    ZEBLACK_,
+    ZEWHITE_,
+    ZEORANGE_
 };
 
 static const ZEFace player_model_f[] = {   
@@ -283,8 +283,8 @@ int main() {
             c_yaw += ZEdeltaTime;
         if (ZEScreen_IsKeyDown(ZEKEY_right))
             c_yaw -= ZEdeltaTime;
-        c_pitch -= ZEmousedY;
-        c_yaw -= ZEmousedX;
+        // c_pitch -= ZEmousedY;
+        // c_yaw -= ZEmousedX;
         ZEScreen_RotateCamera(c_yaw, c_pitch, 0);
         ZEScreen_TranslateCamera(c_pos);
         {

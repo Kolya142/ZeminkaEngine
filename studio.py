@@ -1,5 +1,5 @@
 active_studio_name = \
-"Zeminka Studio v0.10.0 stable branch"
+"Zeminka Studio v0.10.1 stable branch"
 """
 An interactive development environment for the Kolya142's engine "ZeminkaEngine".
 
@@ -31,9 +31,7 @@ from typing import List, Optional, Dict, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 # TODOO: Add JSON parser or something like this.
-
-
-
+# TODOO: Rewrite it to C++ because Python kinda bad.
 
 THEME_DARK = 0
 THEME_LIGHT = 1
@@ -60,8 +58,6 @@ class Config:
     GAME_DIR = ROOT_DIR / "game"
     ENGINE_DIR = ROOT_DIR / "engine"
 
-    COMPILER = "gcc"
-
     # TODO: MacOS uses they own executeable format, not ELF.
     OUTPUT_WIN64_BINARY = "game.exe"
     OUTPUT_UNIXS_BINARY = "game"
@@ -70,9 +66,6 @@ class Config:
         OUTPUT_BINARY = OUTPUT_WIN64_BINARY
     else:
         OUTPUT_BINARY = OUTPUT_UNIXS_BINARY
-
-    URL_STUDIO_SOURCE = "https://raw.githubusercontent.com/Kolya142/newengine/main/studio.py"
-    URL_ENGINE_MASTER = "https://github.com/Kolya142/newengine/archive/refs/heads/main.zip"
 
 if Config.THEME == THEME_DARK:
     CS = [
@@ -145,163 +138,6 @@ class LogWidget(ctk.CTkTextbox):
         self.delete("1.0", "end")
         self.configure(state="disabled")
 
-class CompilerIssuesTable(ctk.CTkFrame):
-    """
-    It's just like LogWidget but for the compiler.
-    """
-    def __init__(self, master, **kwargs):
-        super().__init__(master, **kwargs)
-
-        # TODOO: Some users may want to use light theme.
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure(
-            "Treeview",
-            background=CS[5],
-            foreground=CS[6],
-            fieldbackground=CS[7],
-            borderwidth=0,
-            rowheight=25,
-            font=("FreeMono", 10)
-        )
-        style.configure(
-            "Treeview.Heading",
-            background=CS[8],
-            foreground=CS[9],
-            borderwidth=1,
-            font=("FreeMono", 10, "bold")
-        )
-        style.map("Treeview", background=[('selected', CS[10])])
-
-        columns = ("File", "Line", "Severity", "Message")
-        self.tree = ttk.Treeview(self, columns=columns, show='headings')
-
-        self.tree.heading("File", text="File")
-        self.tree.heading("Line", text="Line")
-        self.tree.heading("Severity", text="Type")
-        self.tree.heading("Message", text="Text")
-
-        self.tree.column("File", width=140, anchor="w")
-        self.tree.column("Line", width=50, anchor="center")
-        self.tree.column("Severity", width=90, anchor="center")
-        self.tree.column("Message", width=450, anchor="w")
-
-        # Scrollbar
-        self.v_scroll = ctk.CTkScrollbar(self, orientation="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.v_scroll.set)
-
-        self.tree.pack(side="left", fill="both", expand=True)
-        self.v_scroll.pack(side="right", fill="y")
-
-    def add_issue(self, file: str, line: str, severity: str, message: str):
-        icon = "ERROR" if severity.lower() == "error" else "WARING"
-        self.tree.insert("", "end", values=(file, line, f"{icon} {severity}", message))
-
-    def clear_issues(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
-
-
-
-class DependencyManager:
-    """Analysis include (#include) system."""
-
-    def extract_includes(self, file_path: Path) -> List[str]:
-        """Extracts all includes by a file name."""
-        if not file_path.exists():
-            return []
-
-        includes_found = []
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-                # #include "file.h"<file.h>
-                pattern = r'#include\s+["<]([^">]+)[">]'
-                matches = re.findall(pattern, content)
-                for m in matches:
-                    includes_found.append(m)
-        except Exception as e:
-            print(f"[DependencyManager] Error when reading {file_path.name}: {e}")
-
-        return includes_found
-
-    def check_rebuild_needed(self, source_c: Path, object_o: Path) -> bool:
-        """Checks is rebuild needed using recursive dependency analyser."""
-
-        if not object_o.exists():  # When there is no target build, because THERE IS NO TARGET BUILD.
-            return True
-
-        target_time = os.path.getmtime(object_o)
-
-        if os.path.getmtime(__file__) > target_time:
-            return True
-
-        if os.path.getmtime(source_c) > target_time:
-            return True
-
-        visited = set()
-        stack = self.extract_includes(source_c)
-
-        while stack:
-            header_name = stack.pop()
-            if header_name in visited:
-                continue
-            visited.add(header_name)
-
-            for folder in [Config.INCLUDE_DIR, Config.ASSETS_DIR, source_c.parent]:
-                h_path = folder / header_name
-                if h_path.exists():
-                    if os.path.getmtime(h_path) > target_time:
-                        return True
-                    stack.extend(self.extract_includes(h_path))
-                    break
-        return False
-
-class GitEngine:
-    """Abstration layer for the Git."""
-
-    @staticmethod
-    def is_installed() -> bool:
-        """Checks is there `git' installed."""
-        try:
-            subprocess.run(["git", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except FileNotFoundError:
-            return False
-
-    @staticmethod
-    def run_command(args: List[str]) -> Tuple[bool, str]:
-        """Executes Git command."""
-        if not GitEngine.is_installed():
-            return False, "Install Git first."
-
-        process = subprocess.run(
-            ["git"] + args,
-            capture_output=True,
-            text=True,
-            cwd=Config.ROOT_DIR,
-            encoding='utf-8',
-            errors='replace'
-        )
-        if process.returncode == 0:
-            output = process.stdout if process.stdout else "Command completed successfully."
-            return True, output
-        else:
-            return False, process.stderr if process.stderr else (process.stdout if process.stdout else "Unknown Git error.")  # Git shall log error, but ...
-
-    @staticmethod
-    def get_repo_status() -> str:
-        git_dir = Config.ROOT_DIR / ".git"
-        if not git_dir.exists():
-            return "The folder does not contain git repo."
-
-        ok, out = GitEngine.run_command(["status", "--short"])
-        if ok:
-            return out if out.strip() else "No Changes."
-        return f"Git error: {out}"
-
-# I removed SnapshotManager because Git already has own snapshot system called `commits'
 
 def parse_engine_api() -> Dict[str, List[str]]:
     results: Dict[str, List[str]] = {}
@@ -314,7 +150,7 @@ def parse_engine_api() -> Dict[str, List[str]]:
 
     forbidden_words = {'return', 'if', 'else', 'while', 'for', 'switch', 'typedef', 'static'}
     valid_prefixes = (
-        'N',  # NewEngine.
+        'ZE',   # ZeminkaEngine.
         'void', 'char', 'short', 'int', 'long', 'float', 'double',  # C types
         'u8', 's8', 'u16', 's16', 'u32', 's32', 'u64', 's64', 'f32', 'f64'  # Simplified types.
     )
@@ -352,7 +188,7 @@ def parse_engine_api() -> Dict[str, List[str]]:
             continue
     return results
 
-# TODO: I want to do it in engine it self, so this is kinda useless
+# TODO: I want to do it in engine it self, so it is kinda useless
 
 def convert_obj_to_c(input_path: Path) -> str:
     """Converts .obj to .c."""
@@ -386,8 +222,6 @@ def convert_obj_to_c(input_path: Path) -> str:
                             faces_list.append(f"    {{{idxs[i]}, {idxs[i+1]}, {idxs[(i+2)%idnx]}}}")
 
         code = f"#pragma once\n\n"
-        code += f"// Generated by NewEngine Studio\n"
-        code += f"// Source: {input_path.name}\n\n"
 
         code += f"static const NE_Vertex {name}_v[] = {{\n"
         code += ",\n".join(vertices_list)
@@ -412,137 +246,6 @@ def convert_obj_to_c(input_path: Path) -> str:
 
     except Exception as e:
         return f"Error when parsing .obj file \"{input_file}\": {str(e)}"
-
-
-
-
-
-class BuildCore:
-    """Parallel Compilation System."""
-    def __init__(self, app):
-        self.app = app
-        self.dep_manager = DependencyManager()
-        self.thread_pool = ThreadPoolExecutor(max_workers=os.cpu_count())
-        self.active_game_process: Optional[subprocess.Popen] = None
-        self.is_compiling = False
-        self.gcc_regex = re.compile(r"^(.*):(\d+):(\d+): (error|warning|note): (.*)$")
-
-    def request_build(self, profile: str, /, auto_run: bool = False, force: bool = False):
-        """Requests threaded build."""
-        if self.is_compiling:
-            return
-        worker = threading.Thread(
-            target=self._compilation_thread_logic,
-            args=(profile, auto_run, force),
-            daemon=True
-        )
-        worker.start()
-
-    def _compile_unit(self, src: Path, flags: List[str], force: bool) -> Optional[str]:
-        rel_path = src.relative_to(Config.ROOT_DIR)
-        obj_name = str(rel_path).replace(os.sep, "_").replace(".c", ".o")
-        obj_full_path = Config.OBJ_DIR / obj_name
-
-        if not force:
-            if not self.dep_manager.check_rebuild_needed(src, obj_full_path):
-                return str(obj_full_path)
-
-        self.app.log_to_console(f"Compiling: {rel_path}\n", "dim")
-
-        # TODOOO: Some compilers (eg. MSVC) requests different arguments
-        cmd = [Config.COMPILER, "-c", str(src), "-o", str(obj_full_path)] + flags
-
-        process_res = subprocess.run(cmd, capture_output=True, text=True, cwd=Config.ROOT_DIR)
-
-        if process_res.stderr:
-            self.app.on_compiler_message(process_res.stderr)
-
-        if process_res.returncode == 0:
-            return str(obj_full_path)
-        return None
-
-    def _compilation_thread_logic(self, profile: str, run_after: bool, force: bool):
-        self.is_compiling = True
-        self.app.set_ui_busy_state(True)
-        self.app.clear_console()
-        self.app.clear_issues()
-
-        start_time = time.time()
-        self.app.log_to_console(f"--- STARTING BUILD USING PROFILE [{profile}] ---\n", "info")
-
-        Config.OBJ_DIR.mkdir(parents=True, exist_ok=True)
-        Config.BIN_DIR.mkdir(parents=True, exist_ok=True)
-
-        with open(Config.BIN_DIR / ".gitignore", 'w') as f:
-            f.write("# NO BINARIES IN MY REPO\n*")
-
-        source_files = []
-        for d in [Config.ENGINE_DIR, Config.GAME_DIR]:
-            if d.exists():
-                source_files.extend(list(d.rglob("*.c")))
-
-        is_debug = "Debug" in profile
-        # O3 is too agressive optimization
-        opt_flags = []
-        match profile:
-            case "Debug":
-                opt_flags = ["-g", "-O0"]
-            case "Release":
-                opt_flags = ["-s", "-O3"]
-            case "Not stripped Release":
-                opt_flags = ["-O3"]
-            case "Low-optimization Release":
-                opt_flags = ["-s"]
-        common_flags = [f"-I{Config.INCLUDE_DIR}", f"-I{Config.ASSETS_DIR}", "-Wall"] + opt_flags
-
-        self.app.log_to_console(f"--- Using {os.cpu_count()} CPU Cores ---\n", "dim")
-        object_units = list(self.thread_pool.map(lambda s: self._compile_unit(s, common_flags, force), source_files))
-
-        if None in object_units:
-            self.app.log_to_console("\nCompilation errors.\n", "error")
-        else:
-            self.app.log_to_console("\n--- LINKING ---\n", "info")
-            output_exe = Config.BIN_DIR / Config.OUTPUT_BINARY
-
-            linker_libs = ["-lopengl32", "-lgdi32"]
-            if platform.system() == "Linux":
-                linker_libs = ["-lGL", "-lm", "-lX11", "-lXrandr"]
-            if not is_debug and platform.system() == "Windows":
-                linker_libs.append("-mwindows")
-
-            link_cmd = [Config.COMPILER] + object_units + ["-o", str(output_exe)] + common_flags + linker_libs
-
-            res_link = subprocess.run(link_cmd, capture_output=True, text=True, cwd=Config.ROOT_DIR)
-
-            if res_link.returncode == 0:
-                elapsed = time.time() - start_time
-                self.app.log_to_console(f"Built successfully for {elapsed:.2f}s.\n", "success")
-                if run_after:
-                    self.execute_game()
-            else:
-                self.app.on_compiler_message(res_link.stderr)
-                self.app.log_to_console("Linking error\n", "error")
-
-        self.is_compiling = False
-        self.app.set_ui_busy_state(False)
-
-    def execute_game(self):
-        binary = Config.BIN_DIR / Config.OUTPUT_BINARY
-        if not binary.exists():
-            self.request_build("Release")
-            return
-
-        if self.active_game_process and self.active_game_process.poll() is None:
-            self.active_game_process.terminate()
-
-        try:
-            self.active_game_process = subprocess.Popen([str(binary)], cwd=Config.ROOT_DIR)
-            self.app.log_to_console("Game executed successfully.\n", "success")
-        except Exception as e:
-            self.app.log_to_console(f"Failed to execute the game: {e}\n", "error")
-
-
-
 
 
 class StudioApp(ctk.CTk):
@@ -597,9 +300,7 @@ class StudioApp(ctk.CTk):
         self.tabs.grid(row=0, column=1, padx=15, pady=15, sticky="nsew")
 
         self._init_tab_console(self.tabs.add("Console"))
-        self._init_tab_git(self.tabs.add("Git"))
         self._init_tab_api(self.tabs.add("API Viewer"))
-        self._init_tab_system(self.tabs.add("System"))
         self._init_tab_assets(self.tabs.add("Assets"))
 
     def _init_tab_console(self, tab):
@@ -607,28 +308,10 @@ class StudioApp(ctk.CTk):
         self.issues_view = CompilerIssuesTable(tab); self.issues_view.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.console_view = LogWidget(tab); self.console_view.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-    def _init_tab_git(self, tab):
-        tab.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(tab, text="Git Status", font=("Arial", 16, "bold")).pack(pady=10)
-        self.ui_git_log = ctk.CTkTextbox(tab, height=300, font=("FreeMono", 11)); self.ui_git_log.pack(fill="x", padx=20, pady=10)
-
-        f = ctk.CTkFrame(tab); f.pack(pady=10)
-        ctk.CTkButton(f, text="Update", width=100, command=self.on_git_refresh_ui).pack(side="left", padx=5)
-        ctk.CTkButton(f, text="Commit", width=100, command=self.on_git_commit_ui).pack(side="left", padx=5)
-        ctk.CTkButton(f, text="Push", width=100, command=lambda: self.on_git_action_async(["push"])).pack(side="left", padx=5)
-        self.on_git_refresh_ui()
-
     def _init_tab_api(self, tab):
         tab.grid_columnconfigure(0, weight=1); tab.grid_rowconfigure(1, weight=1)
         ctk.CTkButton(tab, text="Scan API", command=self.on_api_scan_ui).pack(pady=10)
         self.ui_api_box = ctk.CTkTextbox(tab, font=("FreeMono", 11)); self.ui_api_box.pack(fill="both", expand=True, padx=20, pady=10)
-
-    def _init_tab_system(self, tab):
-        tab.grid_columnconfigure((0, 1), weight=1)
-
-        f2 = ctk.CTkFrame(tab); f2.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        ctk.CTkButton(f2, text="Update studio.py", command=self.on_update_studio_ui).pack(pady=5)
-        ctk.CTkButton(f2, text="Update Engine Core", fg_color=CS[12], command=self.on_update_engine_ui).pack(pady=5)
 
     def _init_tab_assets(self, tab):
         tab.grid_columnconfigure(0, weight=1)
@@ -641,20 +324,14 @@ class StudioApp(ctk.CTk):
     def log_to_console(self, m, t=None): self.after(0, lambda: self.console_view.log(m, t))
     def clear_console(self): self.after(0, self.console_view.clear_content)
     def clear_issues(self): self.after(0, self.issues_view.clear_issues)
-    def on_compiler_message(self, output):
-        for line in output.splitlines():
-            m = self.build_sys.gcc_regex.match(line)
-            if m:
-                f, ln, col, sev, msg = m.groups()
-                self.after(0, lambda f=f, l=ln, s=sev, msg=msg: self.issues_view.add_issue(f, l, s, msg))
-                self.log_to_console(line + "\n", "error" if sev == "error" else "warning")
-            else: self.log_to_console(line + "\n")
 
     def on_toggle_hot_reload(self):
+        return
         self.hot_reload_active = self.sw_auto.get()
         if self.hot_reload_active: threading.Thread(target=self._hot_reload_loop, daemon=True).start()
 
     def _hot_reload_loop(self):
+        return
         while self.hot_reload_active:
             changed = False
             for d in [Config.ENGINE_DIR, Config.GAME_DIR]:
@@ -665,29 +342,6 @@ class StudioApp(ctk.CTk):
                             self.mtime_store[s_f] = mt; changed = True
             if changed: self.after(0, lambda: self.build_sys.request_build(self.prof_var.get(), True))
             time.sleep(1.5)
-
-    def on_git_refresh_ui(self):
-        self.ui_git_log.delete("1.0", "end")
-        self.ui_git_log.insert("end", GitEngine.get_repo_status())
-
-    def on_git_commit_ui(self):
-        m = simpledialog.askstring("Git Commit", "Commit name")
-        if m:
-            def run():
-                self.log_to_console("Git indexing...\n", "info")
-                GitEngine.run(["add", "."])
-                ok, out = GitEngine.run(["commit", "-m", m])
-                self.log_to_console(out + "\n", "success" if ok else "error")
-                self.after(0, self.on_git_refresh_ui)
-            threading.Thread(target=run, daemon=True).start()
-
-    def on_git_action_async(self, args):
-        def run():
-            self.log_to_console(f"Git {' '.join(args)}...\n", "info")
-            ok, out = GitEngine.run(args)
-            self.log_to_console(out + "\n", "success" if ok else "error")
-            self.after(0, self.on_git_refresh_ui)
-        threading.Thread(target=run, daemon=True).start()
 
     def on_api_scan_ui(self):
         self.ui_api_box.delete("1.0", "end")
@@ -714,39 +368,10 @@ class StudioApp(ctk.CTk):
         messagebox.showinfo("OK", "Done.")
         self.log_to_console(f"Asset {self.current_obj_path.name} converted successfully.\n", "success")
 
-    def on_update_studio_ui(self):
-        def run():
-            self.log_to_console("Updating studio.py...\n", "info")
-            try:
-                with urllib.request.urlopen(Config.URL_STUDIO_SOURCE) as r:
-                    with open("studio.py", "wb") as f: f.write(r.read())
-                self.log_to_console("Success. Restart the studio.\n", "success")
-            except Exception as e: self.log_to_console(f"Error: {e}\n", "error")
-        threading.Thread(target=run, daemon=True).start()
-
-    def on_update_engine_ui(self):
-        def run():
-            self.log_to_console("Updating the engine core...\n", "info")
-            try:
-                with urllib.request.urlopen(Config.URL_ENGINE_MASTER) as r:
-                    with zipfile.ZipFile(io.BytesIO(r.read())) as z:
-                        root = z.namelist()[0].split('/')[0]
-                        for f in z.namelist():
-                            if any(x in f for x in ['engine/', 'include/']):
-                                rel = f[len(root)+1:]
-                                if rel:
-                                    dest = Config.ROOT_DIR / rel
-                                    if f.endswith('/'): dest.mkdir(parents=True, exist_ok=True)
-                                    else: dest.write_bytes(z.read(f))
-                self.log_to_console("Engine updated successfully.\n", "success")
-            except Exception as e: self.log_to_console(f"Error: {e}\n", "error")
-        threading.Thread(target=run, daemon=True).start()
-
     def set_ui_busy_state(self, b):
         st = "disabled" if b else "normal"
         self.btn_compile.configure(state=st)
         self.btn_br.configure(state=st)
-
 
 
 

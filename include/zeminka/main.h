@@ -10,25 +10,30 @@
 #define __STR(x) __STR0(x)
 #endif
 
-#define ZEMINKAENG_VER_MAJOR 0
-#define ZEMINKAENG_VER_MINOR 1
-#define ZEMINKAENG_VER_PATCH 2
-#define ZEMINKAENG_VER __STR(ZEMINKAENG_VER_MAJOR)"."__STR(ZEMINKAENG_VER_MINOR)"."__STR(ZEMINKAENG_VER_PATCH)
+// Major - when backward compatibility is broken
+// Minor - when forward compatibility is broken
+// Patch - when neither backward compatibility nor forward compatibility is broken
 
-/*
-  0.1.0 - First alpha version of this engine. 
- */
+#define ZEMINKAENG_VER_MAJOR 0
+#define ZEMINKAENG_VER_MINOR 2
+#define ZEMINKAENG_VER_PATCH 0
+#define ZEMINKAENG_VER __STR(ZEMINKAENG_VER_MAJOR)"."__STR(ZEMINKAENG_VER_MINOR)"."__STR(ZEMINKAENG_VER_PATCH)
 
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
+
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
+
 typedef float f32;
 typedef double f64;
+
+typedef uintptr_t uptr;
+typedef intptr_t sptr;
 
 extern f64 ZEdeltaTime, ZEdeltaTime30Hz, ZEsystemTime;
 
@@ -112,7 +117,8 @@ ZEVec3 ZEVec3_Scale(ZEVec3 v, f64 s);
 
 f64     ZEVec3_MagSq(ZEVec3 v);
 f64     ZEVec3_Mag(ZEVec3 v);
-ZEVec3 ZEVec3_Norm(ZEVec3 v);
+ZEVec3  ZEVec3_Norm(ZEVec3 v);
+f64     ZEVec3_Dist(ZEVec3 a, ZEVec3 b);
 
 ZEVec4 ZEVec4_Add(ZEVec4 a, ZEVec4 b);
 ZEVec4 ZEVec4_Sub(ZEVec4 a, ZEVec4 b);
@@ -125,3 +131,13 @@ ZEVec3 ZETransformW_Apply(ZETransformW t, ZEVec3 v);
 
 #define zetodo(c) {fprintf(stderr, ""__FILE__":%d: "c"\n", __LINE__);exit(1);}
 
+typedef enum {
+    ZELOG_INFO,
+    ZELOG_TODO,
+    ZELOG_WARNING,
+    ZELOG_ERROR,
+    ZELOG_FATAL  // Automaticly stops the program when reported.
+} ZELogLevel;
+
+
+void ZELog(ZELogLevel ll, const char *fmt, ...);

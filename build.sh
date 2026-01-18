@@ -2,7 +2,7 @@ set -e
 
 #  Linux
 CC=cc
-CFLAGS=
+CFLAGS=-g
 CLIBS="-lGL -lX11 -lXrandr -lm -I./include"
 OUTPUT=game.elf
 

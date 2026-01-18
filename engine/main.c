@@ -1,5 +1,7 @@
 #include <zeminka/engine.h>
 
+#include <stdarg.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -7,7 +9,9 @@
 #include <windows.h>
 #endif
 
-static double getSystemTime() { // TODO: public functions
+#include <time.h>
+
+static double getSystemTime() { // TODO: Make it public.
 #if defined(_WIN32)
     FILETIME system_time;
     ULARGE_INTEGER large;
@@ -21,12 +25,16 @@ static double getSystemTime() { // TODO: public functions
 #elif defined(__APPLE__)
     zetodo("Apple MacOSX");
 #else
-#include <time.h> // Stolen from RGFW and rewrotten with floats.
+    // Stolen from RGFW and rewrotten with floats.
     struct timespec ts;
     const u64 scale_factor = 1000000000;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (f64)ts.tv_sec + (f64)ts.tv_nsec / (f64)scale_factor;
 #endif
+}
+
+static u64 getUnxTime() { // Un*x is a forbidden word.
+    return time(NULL);
 }
 
 static double getDeltaTime() {
@@ -42,6 +50,8 @@ static double getDeltaTime() {
 #define INTF_PLAYER 1
 
 f64 ZEdeltaTime = 0, ZEdeltaTime30Hz = 0, ZEsystemTime = 0;
+
+static ZESndSound *shoot_sound;
 
 typedef struct {
     ZEVec2 pos, vel;
@@ -163,7 +173,7 @@ static void player_onmsg(void *_ent, ZEEnt_ent ent_id, ZEEnt_ent caller, ZEEnt_M
         // ZEScreen_DrawCircle(ent->pos, .01, ZEMYCOLOR);
         ZETransformW tw = ZETransform_Cache((ZETransform) {
                 ent->pos,
-                {0,ZEsystemTime,0},
+                {0,0,0},
                 ZEVec3_From1(.1),
             });
         ZEScreen_RenderModel(player_model, tw);
@@ -181,15 +191,23 @@ static void player_onmsg(void *_ent, ZEEnt_ent ent_id, ZEEnt_ent caller, ZEEnt_M
         for (ZEEnt_ent id = ent_id+1;;++id) {
             s32 iid = ZEEnt_get_intfid(id);
             if (iid == -1) break;
-            if (iid == INTF_PLAYER) { // TODO: i don't know to find collisions between two rotated cubes.
+            if (iid == INTF_PLAYER) { // TODO: i don't know to find collisions between two rotated polygons.
                 Player_Data other_ent;
                 ZEEnt_send(ZEENT_MSG_USR2, id, &other_ent);
-                f64 d = ZEVec3_Mag(ZEVec3_Sub(ent->pos, other_ent.pos));
-                ZEVec3 z = ZEVec3_Scale(ZEVec3_Add(ent->pos, other_ent.pos), .5);
-                if (d <= .17) {
+                if (
+                    ZEGeomAreBBoxIntersecting(
+                                              (ZEGeomBBox) {
+                                                  ent->pos,
+                                                  ZEVec3_From1(.2)
+                                              },
+                                              (ZEGeomBBox) {
+                                                  other_ent.pos,
+                                                  ZEVec3_From1(.2)
+                                              })
+                    ) {
                     const float m1 = 1, m2 = 1;
                     ZEVec3 v1 = ent->vel, v2 = other_ent.vel;
-                    ZEPhysics_cmsolver(m1, &v1, m2, &v2);
+                    ZEPhysics_cmsolver(m1, &v1, m2, &v2, 1);
                     ent->vel = v1;
                     other_ent.vel = v2;
                     ZEEnt_send(ZEENT_MSG_USR1, id, &other_ent);
@@ -223,8 +241,22 @@ ZEEnt_intf player_intf = {
 
 f64 ZEmousedX = 0, ZEmousedY = 0;
 
+static FILE *_logf;
+
 int main() {
     ZEScreen_init(1280, 720, 120., "Zeminka engine v" ZEMINKAENG_VER " test code");
+
+    _logf = fopen("zeminkaengine.log", "wb");
+    if (!_logf)
+        ZELog(ZELOG_FATAL, "Failed to open log file `zeminkaengine.log'.");
+
+    ZELog(ZELOG_INFO, "Successfully opened log file `zeminkaengine.log'.");
+
+    ZESndInit();
+    
+    ZELog(ZELOG_INFO, "Successfully initialized sound engine.");
+
+    shoot_sound = ZESndLoad("./assets/shoot.mp3");
 
     ZEVec3 pos = ZEVec3_From3(0, 0, 1.);
     
@@ -270,8 +302,12 @@ int main() {
             ZETransformW tw = ZETransform_Cache((ZETransform) {{0}, {-c_pitch, c_yaw, 0}, {1,1,1}});
             ZEVec3 fd = ZETransformW_Apply(tw, ZEVec3_From3(0,0,1));
             pd.pos = ZEVec3_Add(c_pos, ZEVec3_Scale(fd, .4));
-            pd.vel = ZEVec3_Scale(fd, .8);
+            pd.vel = ZEVec3_Scale(fd, 1.3);
             ZEEnt_send(ZEENT_MSG_USR1, ZEEnt_add(player_intf), &pd);
+            ZESndSetPos(shoot_sound, ZEVec3_From3(0,0,1));
+            ZESndSetVel(shoot_sound, ZEVec3_From3(0,0,1.3));
+            ZESndSetVolume(shoot_sound, .4);
+            ZESndPlay(shoot_sound);
         }
         if (ZEScreen_IsKeyDown(ZEKEY_up))
             c_pitch += ZEdeltaTime;
@@ -347,6 +383,9 @@ ZEVec3 ZEVec3_Norm(ZEVec3 v) {
     f64 m = ZEVec3_Mag(v);
     return ZEVec3_From3(v.x/m,v.y/m,v.z/m);
 }
+f64    ZEVec3_Dist(ZEVec3 a, ZEVec3 b) {
+    return ZEVec3_Mag(ZEVec3_Sub(a, b));
+}
 
 ZEVec4 ZEVec4_Add(ZEVec4 a, ZEVec4 b) {return ZEVec4_From4(a.x+b.x,a.y+b.y,a.z+b.z,a.w+b.w);}
 ZEVec4 ZEVec4_Sub(ZEVec4 a, ZEVec4 b) {return ZEVec4_From4(a.x-b.x,a.y-b.y,a.z-b.z,a.w-b.w);}
@@ -375,4 +414,34 @@ ZEVec3 ZETransformW_Apply(ZETransformW t, ZEVec3 v) {
     v = ZEVec3_Add(v, t.position);
 
     return v; 
+}
+
+void ZELog(ZELogLevel ll, const char *fmt, ...) {
+    va_list list0, list1;
+    va_start(list0, fmt);
+    va_copy(list1, list0);
+    size_t cnt = vsnprintf(NULL, 0, fmt, list0);
+    char *buf = malloc(cnt+1);
+    buf[cnt] = 0;
+    vsnprintf(buf, cnt+1, fmt, list1);
+    static const char *llses[] = {
+        "INFO",
+        "TODO",
+        "WARNING",
+        "ERROR",
+        "FATAL"
+    };
+    const char *lls = llses[ll];
+    u64 st = getUnxTime();
+    printf("[%s] (%llu) %s\n", lls, st, buf);
+    if (_logf) fprintf(_logf, "[%s] (%llu) %s\n", lls, st, buf);
+    
+    free(buf);
+    va_end(list0);
+    va_end(list1);
+
+    if (ll == ZELOG_FATAL) {
+        // The OS will close file when the program close so, no `fclose(_logf);'.
+        exit(1);
+    }
 }

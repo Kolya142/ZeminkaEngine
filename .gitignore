@@ -4,3 +4,6 @@ game.exe
 # MS Windows stuff
 obj/
 bin/
+
+# Logs
+*.log

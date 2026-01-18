@@ -6,3 +6,8 @@
 
 0.1.2:
  Remove malware from MS Windows version
+
+0.2.0:
+ Add ZESnd module
+ Add ZEGeom module
+ Slightly change some basic modules

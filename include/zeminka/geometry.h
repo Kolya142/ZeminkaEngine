@@ -8,3 +8,4 @@ typedef struct {
 } ZEGeomBBox;
 
 bool ZEGeomAreBBoxIntersecting(ZEGeomBBox a, ZEGeomBBox b);
+// TODO: convex collision https://github.com/lukesrw/separating-axis-theorem

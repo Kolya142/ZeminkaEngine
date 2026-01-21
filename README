@@ -1,0 +1,8 @@
+MIGRATED TO https://codeberg.org/Kolya142/ZeminkaEngine. OLD COMMITS STILL AVALIABLE ON GITHUB https://github.com/Kolya142/ZeminkaEngine/tree/7290df2a6973be2e99f26c8f907910b3b8dcca14.
+
+I'd migrated this project to CodeBerg because GitHub has these problems:
+1. it's under Microsoft®, a corparation that doesn't respect users' freedom.
+2. it's more a social network with parts of Git hosting service than just a Git hosting service
+3. it's slightly moving from „real programming” to AI slop programming
+4. its interface is actually very complicated when CodeBerg's interface is very simple Forgejo
+5. it's training Github Copilot® on users' code even from private repositories and i don't want training AI on code from my game engine
